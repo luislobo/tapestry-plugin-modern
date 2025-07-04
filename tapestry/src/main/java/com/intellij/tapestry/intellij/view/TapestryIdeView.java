@@ -23,15 +23,23 @@ public class TapestryIdeView implements IdeView {
 
     @Override
     public PsiDirectory @NotNull [] getDirectories() {
+        // Use the new public getter on the view pane
+        final Module module = (Module) _viewPane.getData(PlatformCoreDataKeys.MODULE.getName());
+        if (module == null) return PsiDirectory.EMPTY_ARRAY;
+
         final List<PsiDirectory> directories = new ArrayList<>();
-        final ModuleFileIndex moduleFileIndex = ModuleRootManager.getInstance((Module) _viewPane.getData(PlatformCoreDataKeys.MODULE.getName())).getFileIndex();
+        final ModuleFileIndex moduleFileIndex = ModuleRootManager.getInstance(module).getFileIndex();
+
         moduleFileIndex.iterateContent(
-          virtualfile -> {
-              if (virtualfile.isDirectory() && moduleFileIndex.isInSourceContent(virtualfile)) {
-                  directories.add(PsiManager.getInstance(_viewPane.getProject()).findDirectory(virtualfile));
-              }
-              return true;
-          }
+                virtualfile -> {
+                    if (virtualfile.isDirectory() && moduleFileIndex.isInSourceContent(virtualfile)) {
+                        PsiDirectory dir = PsiManager.getInstance(_viewPane.getProject()).findDirectory(virtualfile);
+                        if (dir != null) {
+                            directories.add(dir);
+                        }
+                    }
+                    return true;
+                }
         );
         return directories.toArray(PsiDirectory.EMPTY_ARRAY);
     }
@@ -39,7 +47,8 @@ public class TapestryIdeView implements IdeView {
     @Override
     @Nullable
     public PsiDirectory getOrChooseDirectory() {
-        Object element = _viewPane.getSelectedDescriptor().getElement();
+        // Use the new helper method to get the underlying value of the selected node
+        Object element = _viewPane.getSelectedValue();
 
         if (element instanceof PsiDirectory) {
             return (PsiDirectory) element;

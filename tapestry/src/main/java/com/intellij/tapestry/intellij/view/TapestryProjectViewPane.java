@@ -15,9 +15,9 @@ import com.intellij.openapi.project.ModuleListener;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.ActionCallback;
 import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.psi.PsiClassOwner;
 import com.intellij.psi.PsiDirectory;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiClassOwner; // IMPORT ADDED
 import com.intellij.tapestry.core.TapestryProject;
 import com.intellij.tapestry.core.events.FileSystemListener;
 import com.intellij.tapestry.core.events.TapestryModelChangeListener;
@@ -40,6 +40,7 @@ import com.intellij.tapestry.intellij.view.nodes.FileNode;
 import com.intellij.tapestry.intellij.view.nodes.TapestryNode;
 import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.TreeSpeedSearch;
+
 import com.intellij.ui.tree.AsyncTreeModel;
 import com.intellij.ui.tree.StructureTreeModel;
 import com.intellij.ui.treeStructure.actions.CollapseAllAction;
@@ -81,9 +82,27 @@ public class TapestryProjectViewPane extends AbstractProjectViewPane implements 
     });
 
     for (Module module : ModuleManager.getInstance(myProject).getModules()) {
-      TapestryModuleSupportLoader.getTapestryProject(module).getEventsManager().addFileSystemListener(this);
-      TapestryModuleSupportLoader.getTapestryProject(module).getEventsManager().addTapestryModelListener(this);
+      if (TapestryUtils.isTapestryModule(module)) {
+        TapestryModuleSupportLoader.getTapestryProject(module).getEventsManager().addFileSystemListener(this);
+        TapestryModuleSupportLoader.getTapestryProject(module).getEventsManager().addTapestryModelListener(this);
+      }
     }
+  }
+
+  public Project getProject() {
+    return myProject;
+  }
+
+  public boolean canSelect() {
+    return true;
+  }
+
+  public Object getSelectedValue() {
+    final TreePath path = getTree().getSelectionPath();
+    if (path == null) return null;
+    DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+    if (node == null || !(node.getUserObject() instanceof AbstractTreeNode)) return null;
+    return ((AbstractTreeNode<?>) node.getUserObject()).getValue();
   }
 
   @Override
@@ -184,24 +203,26 @@ public class TapestryProjectViewPane extends AbstractProjectViewPane implements 
 
   @Override
   public Object getData(@NotNull String dataId) {
-    final TreePath path = (myTree != null) ? myTree.getSelectionPath() : null;
-    if (path == null) return super.getData(dataId);
+    Object selectedValue = getSelectedValue();
+    if (selectedValue == null) return super.getData(dataId);
 
+    final TreePath path = myTree.getSelectionPath();
+    if (path == null) return super.getData(dataId);
     DefaultMutableTreeNode node = (DefaultMutableTreeNode)path.getLastPathComponent();
     if (node == null || !(node.getUserObject() instanceof AbstractTreeNode)) return super.getData(dataId);
-    Object value = ((AbstractTreeNode<?>)node.getUserObject()).getValue();
 
-    if (CommonDataKeys.NAVIGATABLE.is(dataId) && value instanceof PresentationLibraryElement) {
-      return ((IntellijResource)((PresentationLibraryElement)value).getElementClass().getFile()).getPsiFile();
+
+    if (CommonDataKeys.NAVIGATABLE.is(dataId) && selectedValue instanceof PresentationLibraryElement) {
+      return ((IntellijResource)((PresentationLibraryElement)selectedValue).getElementClass().getFile()).getPsiFile();
     }
     if (PlatformCoreDataKeys.MODULE.is(dataId)) {
       if (node.getUserObject() instanceof TapestryNode) return ((TapestryNode<?>)node.getUserObject()).getModule();
-      if (value instanceof Module) return value;
+      if (selectedValue instanceof Module) return selectedValue;
     }
     if (PlatformDataKeys.DELETE_ELEMENT_PROVIDER.is(dataId)) {
       return new SafeDeleteProvider();
     }
-    if (LangDataKeys.IDE_VIEW.is(dataId) && (value instanceof PsiDirectory || value instanceof PsiFile)) {
+    if (LangDataKeys.IDE_VIEW.is(dataId) && (selectedValue instanceof PsiDirectory || selectedValue instanceof PsiFile)) {
       return myIdeView;
     }
     return super.getData(dataId);
@@ -211,7 +232,6 @@ public class TapestryProjectViewPane extends AbstractProjectViewPane implements 
     tree.getSelectionModel().addTreeSelectionListener(e -> {
       if (e.getNewLeadSelectionPath() == null) return;
 
-      // Use myProject field instead of getProject()
       TapestryToolWindow toolWindow = TapestryToolWindowFactory.getToolWindow(myProject);
       if (toolWindow == null) return;
 
@@ -289,7 +309,6 @@ public class TapestryProjectViewPane extends AbstractProjectViewPane implements 
     }
 
     ProjectView projectView = ProjectView.getInstance(myProject);
-    // This is the corrected line:
     boolean isCurrentlyShown = projectView.getPaneIds().contains(ID);
 
     if (shouldShow && !isCurrentlyShown) {
